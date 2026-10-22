@@ -1,1 +1,216 @@
 
+
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta name="theme-color" content="#174d3a">
+
+<title>Kingdom Hall Maintenance</title>
+
+<style>
+
+body{font-family:Arial,sans-serif;margin:0;background:#f3f5f3;color:#20352b}
+
+header{background:#174d3a;color:white;padding:24px 18px;border-radius:0 0 22px 22px}
+
+h1{font-size:24px;margin:0 0 8px}
+
+main{padding:16px;max-width:650px;margin:auto}
+
+select,input,button{font:inherit;padding:12px;border-radius:10px;border:1px solid #ccd5ce}
+
+select,input{box-sizing:border-box;width:100%;background:white;margin:6px 0 12px}
+
+.quarters{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}
+
+.quarter{background:white;border:1px solid #d8e1da;padding:18px;border-radius:14px;text-align:left}
+
+.quarter strong{display:block;font-size:20px}
+
+.quarter.active{background:#dcebe1;border:2px solid #28714e}
+
+.task{background:white;padding:14px;border-radius:12px;margin:10px 0;box-shadow:0 1px 3px #0001}
+
+.task label{display:flex;gap:10px;align-items:flex-start}
+
+.task input{width:auto;margin:3px 0}
+
+small{color:#65766b}
+
+button.primary{background:#174d3a;color:white;border:0;width:100%;margin:6px 0}
+
+button.delete{background:#fff0ee;color:#963c30;border:0}
+
+</style>
+
+</head>
+
+<body>
+
+<header>
+
+<h1>Kingdom Hall Maintenance</h1>
+
+<div>Maintenance tasks and completion history</div>
+
+</header>
+
+<main>
+
+<label for="congregation">Congregation</label>
+
+<select id="congregation">
+
+<option>West</option><option>East</option><option>Sunset Spanish</option>
+
+</select>
+
+<label for="year">Year</label>
+
+<select id="year"></select>
+
+<div class="quarters" id="quarters"></div>
+
+<h2 id="heading">Q1 Tasks</h2>
+
+<div id="tasks"></div>
+
+<h3>Add a task</h3>
+
+<input id="newTask" placeholder="Task name">
+
+<select id="taskQuarter">
+
+<option value="1">Q1</option><option value="2">Q2</option>
+
+<option value="3">Q3</option><option value="4">Q4</option>
+
+</select>
+
+<button class="primary" id="add">Add task</button>
+
+<p><small>This first version saves on this iPhone/browser only. Shared syncing between coordinators needs an additional setup step.</small></p>
+
+</main>
+
+<script>
+
+const defaults=[
+
+["Fire protection",1],["HVAC system — quarterly",1],
+
+["Interior chairs and furniture",1],["Plumbing system",1],
+
+["Carpets and mats",1],["Doors, partitions and windows",1],
+
+["Exterior and structural inspection",1],
+
+["Pest control inspection",2],["Potable water supply",2],
+
+["Irrigation system",2],["HVAC system — yearly",2],
+
+["Natural gas and LPG",2],["Storage and shed organization",2],
+
+["Security system",3],["Fences and gates",3],["Ladders and tools",3],
+
+["Roof, gutters and downspouts",4],["Interior and exterior lighting",4],
+
+["Grading and drainage",4],["Roads, pavement and walkways",4],
+
+["Audio/video system",3],["Office equipment",3],["Cleaning equipment",1]
+
+];
+
+const key="kh-maintenance-v1";
+
+let data={};
+
+try{data=JSON.parse(localStorage.getItem(key)||"{}")}catch(e){}
+
+let q=1;
+
+const $=id=>document.getElementById(id);
+
+const year=$("year"),cong=$("congregation");
+
+for(let y=new Date().getFullYear();y>=2024;y--){
+
+let o=document.createElement("option");o.value=y;o.textContent=y;year.appendChild(o)
+
+}
+
+function id(){return cong.value+"-"+year.value}
+
+function tasks(){return data[id()]||(data[id()]=defaults.map((t,i)=>({name:t[0],q:t[1],done:false,date:"",uid:i+1})))}
+
+function save(){localStorage.setItem(key,JSON.stringify(data))}
+
+function render(){
+
+$("quarters").innerHTML="";
+
+for(let n=1;n<=4;n++){
+
+let b=document.createElement("button");b.className="quarter"+(q===n?" active":"");
+
+b.innerHTML="<strong>Q"+n+"</strong><small>Quarter "+n+"</small>";
+
+b.onclick=()=>{q=n;render()};$("quarters").appendChild(b)
+
+}
+
+$("heading").textContent="Q"+q+" Tasks";
+
+$("tasks").innerHTML="";
+
+tasks().filter(t=>t.q===q).forEach(t=>{
+
+let d=document.createElement("div");d.className="task";
+
+let label=document.createElement("label"),cb=document.createElement("input");
+
+cb.type="checkbox";cb.checked=t.done;
+
+cb.onchange=()=>{t.done=cb.checked;t.date=t.done?new Date().toLocaleDateString():"";save();render()};
+
+let span=document.createElement("span");span.textContent=t.name;
+
+label.append(cb,span);d.appendChild(label);
+
+let small=document.createElement("small");small.textContent=t.done?"Completed: "+t.date:"Not completed";d.appendChild(small);
+
+let del=document.createElement("button");del.textContent="Delete";del.className="delete";
+
+del.onclick=()=>{if(confirm("Delete this task?")){let a=tasks();data[id()]=a.filter(x=>x.uid!==t.uid);save();render()}};
+
+d.appendChild(document.createElement("br"));d.appendChild(del);$("tasks").appendChild(d)
+
+});
+
+if(!$("tasks").children.length)$("tasks").textContent="No tasks in this quarter yet."
+
+}
+
+$("add").onclick=()=>{
+
+let name=$("newTask").value.trim();if(!name){alert("Enter a task name first.");return}
+
+let a=tasks();a.push({name,q:Number($("taskQuarter").value),done:false,date:"",uid:Date.now()});
+
+$("newTask").value="";save();q=Number($("taskQuarter").value);render()
+
+};
+
+year.onchange=render;cong.onchange=render;render();
+
+</script>
+
+</body>
+
+</html>
