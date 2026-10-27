@@ -1,6 +1,5 @@
 
 
-
 <!DOCTYPE html>
 
 <html lang="en">
@@ -37,15 +36,19 @@ select,input{box-sizing:border-box;width:100%;background:white;margin:6px 0 12px
 
 .task{background:white;padding:14px;border-radius:12px;margin:10px 0;box-shadow:0 1px 3px #0001}
 
-.task label{display:flex;gap:10px;align-items:flex-start}
+.task label{display:block;font-weight:bold;margin-bottom:8px}
 
-.task input{width:auto;margin:3px 0}
+.task input[type=checkbox]{width:auto;margin-right:8px}
+
+.task input[type=text],.task select{margin:5px 0 10px}
 
 small{color:#65766b}
 
 button.primary{background:#174d3a;color:white;border:0;width:100%;margin:6px 0}
 
-button.delete{background:#fff0ee;color:#963c30;border:0}
+button.delete{background:#fff0ee;color:#963c30;border:0;width:auto}
+
+.status{font-size:13px;color:#65766b;margin:8px 0}
 
 </style>
 
@@ -57,23 +60,29 @@ button.delete{background:#fff0ee;color:#963c30;border:0}
 
 <h1>Kingdom Hall Maintenance</h1>
 
-<div>Maintenance tasks and completion history</div>
+<div>Quarterly task assignments and completion history</div>
 
 </header>
 
 <main>
 
-<label for="congregation">Congregation</label>
-
-<select id="congregation">
-
-<option>West</option><option>East</option><option>Sunset Spanish</option>
-
-</select>
-
 <label for="year">Year</label>
 
 <select id="year"></select>
+
+<label for="filterCongregation">Show assignments for</label>
+
+<select id="filterCongregation">
+
+<option value="">All congregations</option>
+
+<option>West</option>
+
+<option>East</option>
+
+<option>Sunset Spanish</option>
+
+</select>
 
 <div class="quarters" id="quarters"></div>
 
@@ -81,75 +90,223 @@ button.delete{background:#fff0ee;color:#963c30;border:0}
 
 <div id="tasks"></div>
 
-<h3>Add a task</h3>
+<h3>Add a task card</h3>
 
-<input id="newTask" placeholder="Task name">
+<label for="newTask">Task name</label>
+
+<input id="newTask" placeholder="Enter task name">
+
+<label for="taskQuarter">Quarter</label>
 
 <select id="taskQuarter">
 
-<option value="1">Q1</option><option value="2">Q2</option>
+<option value="1">Q1 — January to March</option>
 
-<option value="3">Q3</option><option value="4">Q4</option>
+<option value="2">Q2 — April to June</option>
+
+<option value="3">Q3 — July to September</option>
+
+<option value="4">Q4 — October to December</option>
 
 </select>
 
-<button class="primary" id="add">Add task</button>
+<button class="primary" id="add">Add task card</button>
 
-<p><small>This first version saves on this iPhone/browser only. Shared syncing between coordinators needs an additional setup step.</small></p>
+<p class="status" id="saveStatus">Assignments save in this browser on this device.</p>
 
 </main>
 
 <script>
 
+const congregationNames=["West","East","Sunset Spanish"];
+
 const defaults=[
 
-["Fire protection",1],["HVAC system — quarterly",1],
+["Fire protection",1],
 
-["Interior chairs and furniture",1],["Plumbing system",1],
+["HVAC system — quarterly",1],
 
-["Carpets and mats",1],["Doors, partitions and windows",1],
+["Interior chairs and furniture",1],
+
+["Plumbing system",1],
+
+["Carpets and mats",1],
+
+["Doors, partitions and windows",1],
 
 ["Exterior and structural inspection",1],
 
-["Pest control inspection",2],["Potable water supply",2],
+["Pest control inspection",2],
 
-["Irrigation system",2],["HVAC system — yearly",2],
+["Potable water supply",2],
 
-["Natural gas and LPG",2],["Storage and shed organization",2],
+["Irrigation system",2],
 
-["Security system",3],["Fences and gates",3],["Ladders and tools",3],
+["HVAC system — yearly",2],
 
-["Roof, gutters and downspouts",4],["Interior and exterior lighting",4],
+["Natural gas and LPG",2],
 
-["Grading and drainage",4],["Roads, pavement and walkways",4],
+["Security system",3],
 
-["Audio/video system",3],["Office equipment",3],["Cleaning equipment",1]
+["Fences and gates",3],
+
+["Roof, gutters and downspouts",4],
+
+["Interior and exterior lighting",4],
+
+["Grading and drainage",4],
+
+["Roads, pavement and walkways",4],
+
+["Audio/video system",3],
+
+["Office equipment",3],
+
+["Cleaning equipment",1]
 
 ];
 
-const key="kh-maintenance-v1";
+const oldKey="kh-maintenance-v1";
+
+const key="kh-maintenance-v2";
 
 let data={};
 
-try{data=JSON.parse(localStorage.getItem(key)||"{}")}catch(e){}
+try{
+
+data=JSON.parse(localStorage.getItem(key)||"{}");
+
+}catch(e){data={};}
 
 let q=1;
 
 const $=id=>document.getElementById(id);
 
-const year=$("year"),cong=$("congregation");
+const year=$("year");
 
 for(let y=new Date().getFullYear();y>=2024;y--){
 
-let o=document.createElement("option");o.value=y;o.textContent=y;year.appendChild(o)
+let option=document.createElement("option");
+
+option.value=y;
+
+option.textContent=y;
+
+year.appendChild(option);
 
 }
 
-function id(){return cong.value+"-"+year.value}
+function makeTask(name,quarter,uid){
 
-function tasks(){return data[id()]||(data[id()]=defaults.map((t,i)=>({name:t[0],q:t[1],done:false,date:"",uid:i+1})))}
+return {
 
-function save(){localStorage.setItem(key,JSON.stringify(data))}
+name:name,
+
+q:quarter,
+
+uid:uid,
+
+assignedCongregation:"",
+
+person:"",
+
+done:false,
+
+date:""
+
+};
+
+}
+
+// Migrate existing task completion data when possible.
+
+if(!Object.keys(data).length){
+
+try{
+
+const old=JSON.parse(localStorage.getItem(oldKey)||"{}");
+
+const years=[...year.options].map(o=>o.value);
+
+years.forEach(y=>{
+
+let merged=defaults.map((t,i)=>makeTask(t[0],t[1],i+1));
+
+congregationNames.forEach(c=>{
+
+const oldTasks=old[c+"-"+y];
+
+if(!Array.isArray(oldTasks))return;
+
+oldTasks.forEach(t=>{
+
+const match=merged.find(x=>x.name===t.name);
+
+if(match && t.done){
+
+match.done=true;
+
+match.date=t.date||"";
+
+}
+
+});
+
+});
+
+data[y]=merged;
+
+});
+
+}catch(e){}
+
+}
+
+function tasks(){
+
+const y=year.value;
+
+if(!data[y]){
+
+data[y]=defaults.map((t,i)=>makeTask(t[0],t[1],i+1));
+
+}
+
+return data[y];
+
+}
+
+function save(){
+
+localStorage.setItem(key,JSON.stringify(data));
+
+$("saveStatus").textContent="Saved on this device.";
+
+}
+
+function makeSelect(options,value,onchange){
+
+const s=document.createElement("select");
+
+options.forEach(item=>{
+
+const o=document.createElement("option");
+
+o.value=item.value;
+
+o.textContent=item.label;
+
+s.appendChild(o);
+
+});
+
+s.value=value||"";
+
+s.onchange=onchange;
+
+return s;
+
+}
 
 function render(){
 
@@ -157,57 +314,211 @@ $("quarters").innerHTML="";
 
 for(let n=1;n<=4;n++){
 
-let b=document.createElement("button");b.className="quarter"+(q===n?" active":"");
+const b=document.createElement("button");
 
-b.innerHTML="<strong>Q"+n+"</strong><small>Quarter "+n+"</small>";
+b.className="quarter"+(q===n?" active":"");
 
-b.onclick=()=>{q=n;render()};$("quarters").appendChild(b)
+b.innerHTML="<strong>Q"+n+"</strong><small>"+[
+
+"January – March",
+
+"April – June",
+
+"July – September",
+
+"October – December"
+
+][n-1]+"</small>";
+
+b.onclick=()=>{q=n;render();};
+
+$("quarters").appendChild(b);
 
 }
 
 $("heading").textContent="Q"+q+" Tasks";
 
-$("tasks").innerHTML="";
+const container=$("tasks");
 
-tasks().filter(t=>t.q===q).forEach(t=>{
+container.innerHTML="";
 
-let d=document.createElement("div");d.className="task";
+const filter=$("filterCongregation").value;
 
-let label=document.createElement("label"),cb=document.createElement("input");
+const list=tasks().filter(t=>
 
-cb.type="checkbox";cb.checked=t.done;
+Number(t.q)===q &&
 
-cb.onchange=()=>{t.done=cb.checked;t.date=t.done?new Date().toLocaleDateString():"";save();render()};
+(!filter || t.assignedCongregation===filter)
 
-let span=document.createElement("span");span.textContent=t.name;
+);
 
-label.append(cb,span);d.appendChild(label);
+if(!list.length){
 
-let small=document.createElement("small");small.textContent=t.done?"Completed: "+t.date:"Not completed";d.appendChild(small);
+container.textContent="No tasks match this quarter and congregation.";
 
-let del=document.createElement("button");del.textContent="Delete";del.className="delete";
+return;
 
-del.onclick=()=>{if(confirm("Delete this task?")){let a=tasks();data[id()]=a.filter(x=>x.uid!==t.uid);save();render()}};
+}
 
-d.appendChild(document.createElement("br"));d.appendChild(del);$("tasks").appendChild(d)
+list.forEach(t=>{
+
+const card=document.createElement("div");
+
+card.className="task";
+
+const title=document.createElement("label");
+
+const cb=document.createElement("input");
+
+cb.type="checkbox";
+
+cb.checked=!!t.done;
+
+cb.onchange=()=>{
+
+t.done=cb.checked;
+
+t.date=t.done?new Date().toLocaleDateString():"";
+
+save();
+
+render();
+
+};
+
+title.appendChild(cb);
+
+title.appendChild(document.createTextNode(t.name));
+
+card.appendChild(title);
+
+const congLabel=document.createElement("small");
+
+congLabel.textContent="Assigned congregation";
+
+card.appendChild(congLabel);
+
+const assigned=makeSelect([
+
+{value:"",label:"Choose a congregation"},
+
+...congregationNames.map(c=>({value:c,label:c}))
+
+],t.assignedCongregation,()=>{
+
+t.assignedCongregation=assigned.value;
+
+save();
+
+render();
 
 });
 
-if(!$("tasks").children.length)$("tasks").textContent="No tasks in this quarter yet."
+card.appendChild(assigned);
+
+const personLabel=document.createElement("small");
+
+personLabel.textContent="Person responsible";
+
+card.appendChild(personLabel);
+
+const person=document.createElement("input");
+
+person.type="text";
+
+person.placeholder="Enter responsible person's name";
+
+person.value=t.person||"";
+
+person.onchange=()=>{
+
+t.person=person.value.trim();
+
+save();
+
+};
+
+card.appendChild(person);
+
+const status=document.createElement("div");
+
+status.className="status";
+
+status.textContent=t.done
+
+?"Completed: "+(t.date||"Date not recorded")
+
+:"Not completed";
+
+card.appendChild(status);
+
+const del=document.createElement("button");
+
+del.textContent="Delete task";
+
+del.className="delete";
+
+del.onclick=()=>{
+
+if(confirm("Delete this task card?")){
+
+data[year.value]=tasks().filter(x=>x.uid!==t.uid);
+
+save();
+
+render();
+
+}
+
+};
+
+card.appendChild(del);
+
+container.appendChild(card);
+
+});
 
 }
 
 $("add").onclick=()=>{
 
-let name=$("newTask").value.trim();if(!name){alert("Enter a task name first.");return}
+const name=$("newTask").value.trim();
 
-let a=tasks();a.push({name,q:Number($("taskQuarter").value),done:false,date:"",uid:Date.now()});
+if(!name){
 
-$("newTask").value="";save();q=Number($("taskQuarter").value);render()
+alert("Enter a task name first.");
+
+return;
+
+}
+
+const a=tasks();
+
+a.push(makeTask(
+
+name,
+
+Number($("taskQuarter").value),
+
+Date.now()
+
+));
+
+$("newTask").value="";
+
+q=Number($("taskQuarter").value);
+
+save();
+
+render();
 
 };
 
-year.onchange=render;cong.onchange=render;render();
+year.onchange=render;
+
+$("filterCongregation").onchange=render;
+
+render();
 
 </script>
 
